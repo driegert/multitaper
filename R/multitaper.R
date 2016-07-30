@@ -45,6 +45,7 @@ spec.mtm <- function(timeSeries,
                      jackknife=FALSE,
                      jkCIProb=.95,
                      adaptiveWeighting=TRUE,
+                     optBW = FALSE,
                      maxAdaptiveIterations=100,
                      plot=TRUE,
                      na.action=na.fail,
@@ -174,16 +175,25 @@ spec.mtm <- function(timeSeries,
         timeSeries <- centre(timeSeries, trim=0.10)
     }
    
-    if(taper=="dpss") { 
-        mtm.obj <- .spec.mtm.dpss(timeSeries=timeSeries,
-                                  nw=nw, k=k, nFFT=nFFT, 
-                                  dpssIN=dpssIN, returnZeroFreq=returnZeroFreq, 
-                                  Ftest=Ftest, jackknife=jackknife, jkCIProb=jkCIProb, 
-                                  adaptiveWeighting = adaptiveWeighting, 
-                                  maxAdaptiveIterations=maxAdaptiveIterations, 
-                                  returnInternals=returnInternals, 
+    if(taper=="dpss") {
+      if (optBW){
+        nw <- .determineBandwidth(timeSeries = timeSeries,
+                                  nFFT = nFFT,
+                                  dpssIN = dpssIN, adaptiveWeighting = adaptiveWeighting,
+                                  maxAdaptiveIterations=maxAdaptiveIterations,
                                   n=n, deltaT=deltaT, sigma2=sigma2, series=series,
-                                  dtUnits=dtUnits, ...) 
+                                  dtUnits=dtUnits, ...)
+        k <- floor(2*nw) # perhaps 2*nw-1 - doesn't matter if adaptively weighted...
+      }
+      mtm.obj <- .spec.mtm.dpss(timeSeries=timeSeries,
+                                nw=nw, k=k, nFFT=nFFT, 
+                                dpssIN=dpssIN, returnZeroFreq=returnZeroFreq, 
+                                Ftest=Ftest, jackknife=jackknife, jkCIProb=jkCIProb, 
+                                adaptiveWeighting = adaptiveWeighting, 
+                                maxAdaptiveIterations=maxAdaptiveIterations, 
+                                returnInternals=returnInternals, 
+                                n=n, deltaT=deltaT, sigma2=sigma2, series=series,
+                                dtUnits=dtUnits, ...)
     } else if(taper=="sine") {
         mtm.obj <- .spec.mtm.sine(timeSeries=timeSeries, k=k, sineAdaptive=sineAdaptive,
                                   nFFT=nFFT, dpssIN=dpssIN, returnZeroFreq=returnZeroFreq,

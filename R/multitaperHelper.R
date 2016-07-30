@@ -155,3 +155,128 @@
 
 }
 
+# things that are currently hardcoded:
+## returnZeroFreq=TRUE, Ftest=FALSE, jkCIProb=0.95, 
+.determineBandwidth <- function(timeSeries,
+                                nFFT,
+                                dpssIN,
+                                adaptiveWeighting,
+                                maxAdaptiveIterations,
+                                n,
+                                deltaT,
+                                sigma2,
+                                series,
+                                dtUnits,
+                                ...){
+  # initial values:
+  nw <- seq(2, 30)
+  w <- nw / n
+  k <- floor(2*nw)
+  
+  ### NEED TO FIX: How to determine break points in an unsupervised manner
+  # if (is.complex(timeSeries)){
+  #   probs <- seq(0, 1, 0.1/2) ## this
+  # } else {
+  #   probs <- seq(0, 1, 0.1) ## and this..
+  # }
+  
+  mse <- rep(0, length(nw))
+  bias2 <- rep(0, length(nw))
+  Evar <- rep(0, length(nw))
+  # Mjkvar <- rep(0, length(nw))
+  for (i in 1:length(nw)){
+    ## This is here from testing
+    mtm.obj <- spec.mtm(timeSeries, nw = nw[i], k = k[i], nFFT = nFFT, jackknife = TRUE, plot=F
+    , deltat = deltaT, adaptiveWeighting = TRUE)
+    # mtm.obj <- .spec.mtm.dpss(timeSeries=timeSeries,
+    #                           nw=nw[i], k=k[i], nFFT=nFFT,
+    #                           dpssIN=FALSE, returnZeroFreq=TRUE, #dpssIN=FALSE may not work...
+    #                           Ftest=FALSE, jackknife=TRUE, jkCIProb=0.95,
+    #                           adaptiveWeighting = adaptiveWeighting,
+    #                           maxAdaptiveIterations=maxAdaptiveIterations,
+    #                           returnInternals=FALSE, # might not need these?
+    #                           n=n, deltaT=deltaT, sigma2=sigma2, series=series,
+    #                           dtUnits=dtUnits, ...)
+    
+    # setup the spline basis and derivatives:
+    ####
+    # subsample the frequencies - every 2w
+    deltaf <- mtm.obj$freq[2] - mtm.obj$freq[1]
+    
+    # original code:
+    # freqSubIdx <- seq(1, length(mtm.obj$freq), by = round(2*w[i] / (deltaT*deltaf))) # not sure if rounding will cause issues... probably not
+    # spline.freq <- mtm.obj$freq[freqSubIdx]
+    
+    # Try all the frequencies:
+    freqSubIdx <- 1:length(mtm.obj$freq)
+    spline.freq <- mtm.obj$freq
+
+    # expected jackknife variance - Haley, Eq (43)
+    expJkVar <- ( ((k[i]-1)^3)/(k[i] * (k[i] - 0.5)) ) * ( (2 / (k[i]-2)^2) + 0.5*(trigamma((k[i]-1)/2) - trigamma((k[i]-2)/2)) )
+    Evar[i] <- expJkVar
+    
+    #################### Choice 1 - b-splines - 5th order ###############
+    # breaks <- .chooseKnots(mtm.obj$spec[freqSubIdx], spline.freq, spar = length(freqSubIdx) * expJkVar)
+    # 
+    # # fit the splines to the spectrum
+    # splineModel <- lm(mtm.obj$spec[freqSubIdx] ~ bsplineS(x = spline.freq, norder = 6
+    #                                           , breaks = breaks, nderiv = 0) - 1) # no intercept
+    # # 2nd derivative of spline fit
+    # splineModel.d2 <- bsplineS(x = spline.freq, norder = 6
+    #                            , breaks = breaks, nderiv = 2) %*%
+    #   matrix(coefficients(splineModel), ncol = 1)
+    #####################################################################
+    
+    ### choice 2 - penalized smoothing splines in R ###
+    splineModel <- smooth.Pspline(spline.freq, mtm.obj$spec[freqSubIdx], norder = 3, method = 4)
+    splineModel.d2 <- predict(splineModel, xarg = spline.freq, nderiv = 2)
+    #########################################
+    
+    ### Choice 3 - cubic smoothing splines
+    # splineModel <- smooth.spline(spline.freq, mtm.obj$spec[freqSubIdx])
+    # splineModel.d2 <- predict(splineModel, x = spline.freq, deriv = 2)$y
+    
+    ### REMOVE THIS AFTER ###
+    bias2[i] <- mean( log( (mtm.obj$spec[freqSubIdx] + abs(w[i]^3 * splineModel.d2 / 3)) / mtm.obj$spec[freqSubIdx] )^2 )
+    logbias2 <- log( (mtm.obj$spec[freqSubIdx] + abs(w[i]^3 * splineModel.d2 / 3)) / mtm.obj$spec[freqSubIdx] )^2
+    #########################
+    mse[i] <- mean(logbias2 + mtm.obj$mtm$jk$varjk[freqSubIdx])
+    # mse[i] <- mean(logbias2 + expJkVar)
+  }
+  
+  nw[which(mse == min(mse))]
+}
+
+# choose the correct number of knots to use in the bsplines
+## based on the argument 's' from: 
+# http://docs.scipy.org/doc/scipy/reference/generated/scipy.interpolate.UnivariateSpline.html
+.chooseKnots <- function(spec, freqSamp, spar = NULL){
+  nknots <- 0
+  if (is.null(spar)){
+    spar <- 3.2 #### Make this Eq (43) in Haley (expected jk variance)
+  }
+  
+  probs <- seq(0, 1, length.out = nknots + 2)
+  breaks <- quantile(freqSamp, probs = probs)
+  
+  splineModel <- lm(spec ~ bsplineS(x = freqSamp, norder = 6
+                                    , breaks = breaks, nderiv = 0) - 1)
+  
+  while (sum((fitted.values(splineModel) - spec)^2) > spar){
+    if (nknots + 6 >= length(spec)){
+      warning("Could not get the correct number of knots based on smoothing parameter.
+              All points used.")
+      
+      break
+    }
+    
+    nknots <- nknots + 1
+    probs <- seq(0, 1, length.out = nknots + 2)
+    breaks <- quantile(freqSamp, probs = probs)
+    
+    splineModel <- lm(spec ~ bsplineS(x = freqSamp, norder = 6
+                                      , breaks = breaks, nderiv = 0) - 1)
+  }
+  
+  breaks
+}
