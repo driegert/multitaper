@@ -186,17 +186,17 @@
   # Mjkvar <- rep(0, length(nw))
   for (i in 1:length(nw)){
     ## This is here from testing
-    mtm.obj <- spec.mtm(timeSeries, nw = nw[i], k = k[i], nFFT = nFFT, jackknife = TRUE, plot=F
-    , deltat = deltaT, adaptiveWeighting = TRUE)
-    # mtm.obj <- .spec.mtm.dpss(timeSeries=timeSeries,
-    #                           nw=nw[i], k=k[i], nFFT=nFFT,
-    #                           dpssIN=FALSE, returnZeroFreq=TRUE, #dpssIN=FALSE may not work...
-    #                           Ftest=FALSE, jackknife=TRUE, jkCIProb=0.95,
-    #                           adaptiveWeighting = adaptiveWeighting,
-    #                           maxAdaptiveIterations=maxAdaptiveIterations,
-    #                           returnInternals=FALSE, # might not need these?
-    #                           n=n, deltaT=deltaT, sigma2=sigma2, series=series,
-    #                           dtUnits=dtUnits, ...)
+    # mtm.obj <- spec.mtm(timeSeries, nw = nw[i], k = k[i], nFFT = nFFT, jackknife = TRUE, plot=F
+    # , deltat = deltaT, adaptiveWeighting = TRUE)
+    mtm.obj <- .spec.mtm.dpss(timeSeries=timeSeries,
+                              nw=nw[i], k=k[i], nFFT=nFFT,
+                              dpssIN=FALSE, returnZeroFreq=TRUE, #dpssIN=FALSE may not work...
+                              Ftest=FALSE, jackknife=TRUE, jkCIProb=0.95,
+                              adaptiveWeighting = adaptiveWeighting,
+                              maxAdaptiveIterations=maxAdaptiveIterations,
+                              returnInternals=FALSE, # might not need these?
+                              n=n, deltaT=deltaT, sigma2=sigma2, series=series,
+                              dtUnits=dtUnits, ...)
     
     # setup the spline basis and derivatives:
     ####
